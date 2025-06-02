@@ -133,19 +133,26 @@ def clean_json(text):
 # Helper to render structured UI
 def render_property_deed_ui(data):
     deed = data.get("property_deed", {})
-
-    st.subheader("📄 Property Deed Summary")
+    st.title("📄 Property Deed Summary")
 
     with st.expander("🆔 Document Info", expanded=True):
-        st.write(f"**Document ID:** {deed.get('document_id', 'NA')}")
-        st.write(f"**Deed Type:** {deed.get('deed_type', 'NA')}")
+        col1, col2 = st.columns(2)
+        col1.markdown(f"**📑 Document ID:** {deed.get('document_id', 'NA')}")
+        col2.markdown(f"**📘 Deed Type:** {deed.get('deed_type', 'NA')}")
 
     with st.expander("📝 Registration Details", expanded=True):
         reg = deed.get("registration_details", {})
-        st.write(f"**Registration Number:** {reg.get('registration_number', 'NA')}")
-        st.write(f"**Registration Date:** {reg.get('registration_date', 'NA')}")
-        st.write(f"**Sub-Registrar Office:** {reg.get('sub_registrar_office', 'NA')}")
-        st.write(f"**District:** {reg.get('registration_district', 'NA')}")
+        st.markdown("""
+        - 🔢 **Registration Number:** {}
+        - 🗓️ **Registration Date:** {}
+        - 🏢 **Sub-Registrar Office:** {}
+        - 📍 **District:** {}
+        """.format(
+            reg.get('registration_number', 'NA'),
+            reg.get('registration_date', 'NA'),
+            reg.get('sub_registrar_office', 'NA'),
+            reg.get('registration_district', 'NA')
+        ))
 
     with st.expander("👥 Parties Involved", expanded=True):
         parties = deed.get("parties", {})
@@ -153,88 +160,117 @@ def render_property_deed_ui(data):
         buyer = parties.get("buyer", {})
         poa = parties.get("power_of_attorney", {})
 
-        st.markdown("**🔴 Seller:**")
-        st.write(f"- Name: {seller.get('name', 'NA')}")
-        st.write(f"- Address: {seller.get('address', 'NA')}")
-        st.write(f"- PAN: {seller.get('pan', 'NA')}")
-        st.write(f"- Aadhaar: {seller.get('aadhaar', 'NA')}")
+        st.markdown("### 🔴 Seller")
+        st.markdown(f"""
+        - **Name:** {seller.get('name', 'NA')}
+        - **Address:** {seller.get('address', 'NA')}
+        - **PAN:** {seller.get('pan', 'NA')}
+        - **Aadhaar:** {seller.get('aadhaar', 'NA')}
+        """)
 
-        st.markdown("**🟢 Buyer:**")
-        st.write(f"- Name: {buyer.get('name', 'NA')}")
-        st.write(f"- Address: {buyer.get('address', 'NA')}")
-        st.write(f"- PAN: {buyer.get('pan', 'NA')}")
-        st.write(f"- Aadhaar: {buyer.get('aadhaar', 'NA')}")
+        st.markdown("### 🟢 Buyer")
+        st.markdown(f"""
+        - **Name:** {buyer.get('name', 'NA')}
+        - **Address:** {buyer.get('address', 'NA')}
+        - **PAN:** {buyer.get('pan', 'NA')}
+        - **Aadhaar:** {buyer.get('aadhaar', 'NA')}
+        """)
 
-        st.markdown("**📝 Power of Attorney:**")
-        is_applicable = poa.get("is_applicable", True)
-        st.write(f"- Applicable: {is_applicable}")
-        st.write(f"- Details: {poa.get('details', 'NA')}")
+        st.markdown("### 📝 Power of Attorney")
+        st.markdown(f"""
+        - **Applicable:** {poa.get('is_applicable', 'NA')}
+        - **Details:** {poa.get('details', 'NA')}
+        """)
 
     with st.expander("📍 Property Details", expanded=True):
         prop = deed.get("property_details", {})
         extent = prop.get("extent", {})
         boundary = prop.get("boundary_description", {})
 
-        st.write(f"**Survey Number:** {prop.get('survey_number', 'NA')}")
-        st.write(f"**Plot Number:** {prop.get('plot_number', 'NA')}")
-        st.write(f"**Door Number:** {prop.get('door_number', 'NA')}")
-        st.write(f"**Land Area (sqft):** {extent.get('land_area_sqft', 'NA')}")
-        st.write(f"**Built-up Area (sqft):** {extent.get('builtup_area_sqft', 'NA')}")
-        st.write(f"**Address:** {prop.get('property_address', 'NA')}")
-        st.write(f"**Village:** {prop.get('village', 'NA')}")
-        st.write(f"**Taluk:** {prop.get('taluk', 'NA')}")
-        st.write(f"**District:** {prop.get('district', 'NA')}")
-        st.write(f"**State:** {prop.get('state', 'NA')}")
-        st.write(f"**PIN Code:** {prop.get('pin_code', 'NA')}")
+        col1, col2 = st.columns(2)
+        with col1:
+            st.markdown(f"""
+            - **Survey Number:** {prop.get('survey_number', 'NA')}
+            - **Plot Number:** {prop.get('plot_number', 'NA')}
+            - **Door Number:** {prop.get('door_number', 'NA')}
+            - **Land Area (sqft):** {extent.get('land_area_sqft', 'NA')}
+            """)
+        with col2:
+            st.markdown(f"""
+            - **Built-up Area (sqft):** {extent.get('builtup_area_sqft', 'NA')}
+            - **Village:** {prop.get('village', 'NA')}
+            - **Taluk:** {prop.get('taluk', 'NA')}
+            - **District:** {prop.get('district', 'NA')}
+            """)
 
-        st.markdown("**🧭 Boundaries:**")
-        st.write(f"- North: {boundary.get('north', 'NA')}")
-        st.write(f"- South: {boundary.get('south', 'NA')}")
-        st.write(f"- East: {boundary.get('east', 'NA')}")
-        st.write(f"- West: {boundary.get('west', 'NA')}")
+        st.markdown(f"""
+        - **State:** {prop.get('state', 'NA')}
+        - **PIN Code:** {prop.get('pin_code', 'NA')}
+        - **Address:** {prop.get('property_address', 'NA')}
+        """)
+
+        st.markdown("**🧭 Boundaries**")
+        st.markdown(f"""
+        - 🧭 North: {boundary.get('north', 'NA')}
+        - 🧭 South: {boundary.get('south', 'NA')}
+        - 🧭 East: {boundary.get('east', 'NA')}
+        - 🧭 West: {boundary.get('west', 'NA')}
+        """)
 
     with st.expander("⚖️ Legal Info", expanded=True):
         legal = deed.get("legal_info", {})
         land_conv = legal.get("land_conversion_certificate", {})
 
-        st.write(f"**Ownership Type:** {legal.get('ownership_type', 'NA')}")
-        st.write(f"**Land Use:** {legal.get('land_use_type', 'NA')}")
-        st.write(f"**Encumbrance Status:** {legal.get('encumbrance_status', 'NA')}")
-        st.write(f"**Mutation Status:** {legal.get('mutation_status', 'NA')}")
-        st.write(f"**Litigation Status:** {legal.get('litigation_status', 'NA')}")
-        st.write(f"**Legal Opinion Status:** {legal.get('legal_opinion_status', 'NA')}")
+        st.markdown(f"""
+        - **Ownership Type:** {legal.get('ownership_type', 'NA')}
+        - **Land Use:** {legal.get('land_use_type', 'NA')}
+        - **Encumbrance Status:** {legal.get('encumbrance_status', 'NA')}
+        - **Mutation Status:** {legal.get('mutation_status', 'NA')}
+        - **Litigation Status:** {legal.get('litigation_status', 'NA')}
+        - **Legal Opinion Status:** {legal.get('legal_opinion_status', 'NA')}
+        """)
 
-        st.markdown("**📜 Land Conversion Certificate:**")
-        st.write(f"- Required: {land_conv.get('is_required', 'NA')}")
-        st.write(f"- Status: {land_conv.get('status', 'NA')}")
-        st.write(f"- Certificate No: {land_conv.get('certificate_number', 'NA')}")
+        st.markdown("**📜 Land Conversion Certificate**")
+        st.markdown(f"""
+        - **Required:** {land_conv.get('is_required', 'NA')}
+        - **Status:** {land_conv.get('status', 'NA')}
+        - **Certificate Number:** {land_conv.get('certificate_number', 'NA')}
+        """)
 
     with st.expander("💡 Tax & Utilities", expanded=True):
         tax = deed.get("tax_and_utility", {})
         receipts = tax.get("property_tax_receipts", [])
         elec = tax.get("electricity_connection", {})
 
-        st.markdown("**💸 Property Tax Receipts:**")
-        for i, r in enumerate(receipts):
-            st.write(f"• [{i+1}] Receipt No: {r.get('receipt_number', 'NA')}, Year: {r.get('year', 'NA')}, Status: {r.get('status', 'NA')}")
+        st.markdown("**💸 Property Tax Receipts**")
+        if receipts:
+            for i, r in enumerate(receipts):
+                st.markdown(f"- 🔖 **[{i+1}]** Receipt No: {r.get('receipt_number', 'NA')}, Year: {r.get('year', 'NA')}, Status: {r.get('status', 'NA')}")
+        else:
+            st.write("No receipts available.")
 
-        st.markdown("**🔌 Electricity Connection:**")
-        st.write(f"- Connection No: {elec.get('connection_number', 'NA')}")
-        st.write(f"- In Name of: {elec.get('in_name_of', 'NA')}")
-        st.write(f"- Status: {elec.get('status', 'NA')}")
+        st.markdown("**🔌 Electricity Connection**")
+        st.markdown(f"""
+        - **Connection Number:** {elec.get('connection_number', 'NA')}
+        - **In Name of:** {elec.get('in_name_of', 'NA')}
+        - **Status:** {elec.get('status', 'NA')}
+        """)
 
     with st.expander("💰 Valuation & Verification", expanded=True):
         val = deed.get("valuation_and_verification", {})
-        st.write(f"**Market Value:** ₹ {val.get('market_value', 'NA')}")
-        st.write(f"**Guideline Value:** {val.get('guideline_value', 'NA')}")
-        st.write(f"**Technical Verification:** {val.get('technical_verification_status', 'NA')}")
-        st.write(f"**Site Inspection ID:** {val.get('site_inspection_report_id', 'NA')}")
+        st.markdown(f"""
+        - 💸 **Market Value:** ₹ {val.get('market_value', 'NA')}
+        - 📏 **Guideline Value:** {val.get('guideline_value', 'NA')}
+        - ✅ **Technical Verification:** {val.get('technical_verification_status', 'NA')}
+        - 🧾 **Site Inspection ID:** {val.get('site_inspection_report_id', 'NA')}
+        """)
 
     with st.expander("🧾 Miscellaneous", expanded=True):
         misc = deed.get("miscellaneous", {})
-        st.write(f"**Notarized:** {misc.get('notarized', 'NA')}")
-        st.write(f"**Scanned Copy URL:** {misc.get('scanned_copy_url', 'NA')}")
-
+        st.markdown(f"""
+        - **Notarized:** {misc.get('notarized', 'NA')}
+        - **Scanned Copy:** [Link]({misc.get('scanned_copy_url', '#')})
+        """ if misc.get('scanned_copy_url') else "- Scanned copy not available.")
 
 # Final JSON show + UI render
 def show_output(text):
