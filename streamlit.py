@@ -8,10 +8,11 @@ from mimetypes import guess_type
 import json
 import re
 from dotenv import load_dotenv
-
+import requests
+import streamlit.components.v1 as components
 
 load_dotenv()
-genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
+genai.configure(api_key='')
 # model = genai.GenerativeModel("gemini-1.5-flash")
 
 st.title("📄 Document Analyzer")
@@ -26,6 +27,56 @@ Analyze the given document. First, detect the source language of the document. I
 Then, deeply analyze the content — ultra-deep, ultra-important, ultra-analyze — and extract the useful features in the given format. If you can't find any value for a field, just put "NA" or "not assigned", but make the output as reliable as possible. Reliability is a key factor here — very important.
 
 ⚠️ Strictly return the output ONLY as a raw JSON object that matches the following schema. Do not wrap it in markdown or provide any extra explanation.
+1. `chain_of_ownership`: Clearly determine the history of ownership of the property — names and transitions.
+2. cost_evaluation: Extract and analyze pricing details.
+
+- If available, extract the **consideration price** and compare it with the **guideline value**.
+- Calculate the **difference** (Above, Below, or Equal).
+- Extract and validate the **stamp duty** amount paid. If the stamp duty rate is given (e.g. 4%), verify if the paid amount matches the expected value.
+- Conclude with clear **remarks** on whether the valuation and stamp duty appear fair, inflated, or inconsistent.
+
+⚠️ Return the `cost_evaluation` as a JSON object exactly like the following format:
+3. Property Location Details Extraction
+Carefully extract and validate all property location information from the document. Ensure the following:
+
+Property address: Full address including property number, street, area, village, taluk, district, state, and pin code.
+
+Khasra/Survey/Plot numbers: As mentioned.
+
+Boundary description: Extract what's mentioned on all four sides — North, South, East, West.
+
+Latitude/Longitude: If explicitly mentioned in the document, extract directly. If not mentioned, infer from the full address if possible.
+
+Consistency Check: Confirm that these details are consistent across the deed (especially pages like e-Stamp, registration certificate, and property description).
+
+
+4.Signature Verification & Signing Surface Analysis
+  Carefully analyze each page of the document to:
+
+  Identify inconsistencies, forgeries, or variations in signatures (e.g., spelling differences, different styles, scanned signs).
+
+  Verify the surface on which signatures were made:
+
+  Was the page a plain white paper, with text possibly handwritten or typed after printing?
+
+  Was it a pre-printed official/stamp/legal paper?
+
+  Was the signature likely scanned, copied, or digitally inserted?
+
+  Provide:
+
+  status: "Match", "Mismatch Detected", or "Forgery Suspected"
+
+  pages_with_signatures: List of page numbers containing signatures
+
+  signatures_mismatched: List any name variations or irregularities (e.g., "Page 5: 'Anju Khanam' vs Page 2: 'Anju Khurana'")
+
+  signed_on: Specify surface type per page or general (e.g., "plain_white_paper", "printed_legal_paper", "e-stamp_paper")
+
+  signed_properly: Indicate if the signatures appear to have been done after the page was printed
+
+  notes: Add relevant remarks about signature authenticity or unusual findings (e.g., "Signature looks scanned on Page 4", "Photo mismatch on e-Stamp")
+5. `signed_properly`: Flag if the document is signed on plain white paper or appears to have been signed after printing.
 
 type PropertyDeed = {
   property_deed?: {
@@ -113,6 +164,67 @@ type PropertyDeed = {
       notarized?: boolean;
       scanned_copy_url?: string;
     };
+     document_analysis_flags?: {
+    "chain_of_ownership": [
+  {"owner": "Mr. A", "transferred_to": "Ms. B", "date": "2005"},
+  {"owner": "Ms. B", "transferred_to": "Mr. C", "date": "2012"},
+  {"owner": "Mr. C", "transferred_to": "Mr. D", "date": "2020"}
+]
+    "cost_evaluation": {
+      "consideration_price": number,               
+      "guideline_value": number,                   
+      "difference": "Above" | "Below" | "Equal",   
+      "stamp_duty": {
+        "paid": number,                           
+        "expected": number,                        
+        "rate": string                             
+      },
+      "remarks": string                           
+    }
+
+    "location_details": {
+  "address": {
+    "property_number": "",
+    "street": "",
+    "area": "",
+    "village": "",
+    "taluk": "",
+    "district": "",
+    "state": "",
+    "pin_code": ""
+  },
+  "survey_info": {
+    "survey_number": "",
+    "plot_number": "",
+    "door_number": ""
+  },
+  "boundary_description": {
+    "north": "",
+    "south": "",
+    "east": "",
+    "west": ""
+  },
+  "coordinates": {
+    "latitude": null,
+    "longitude": null,
+    "source": "inferred" // or "document"
+  },
+  "consistency_check": {
+    "status": "Consistent",
+    "notes": ""
+  }
+}
+
+    "signature_verification": {
+  "status": "Mismatch Detected",
+  "details": {
+    "pages_with_signatures": [1, 4, 5],
+    "signatures_mismatched": ["Page 4: Seller", "Page 5: Buyer"],
+    "signed_on": "plain_white_paper",
+    "notes": "Signature on page 4 is scanned. Buyer sign on page 5 doesn't match page 1."
+  }
+}
+
   };
 };
 
@@ -127,14 +239,260 @@ type PropertyDeed = {
 uploaded_file = st.file_uploader("Upload Document pdf", type=["pdf"])
 
 def clean_json(text):
-    # Strip markdown-like wrappers
-    cleaned = re.sub(r"```(?:json)?", "", text).strip("` \n")
-    return cleaned
-# Helper to render structured UI
+    if isinstance(text, dict):
+        return text
+    elif isinstance(text, str):
+        cleaned = re.sub(r"```(?:json)?", "", text).strip("` \n")
+        try:
+            return json.loads(cleaned)
+        except json.JSONDecodeError as e:
+            st.error(f"⚠️ Failed to parse JSON: {e}")
+            return {}
+    else:
+        st.error("⚠️ Invalid data type received.")
+        return {}
+
+
+def render_signature_verification(sig_data):
+    st.markdown("### ✍️ Signature Verification")
+    if isinstance(sig_data, dict):
+        st.markdown(f"**Status:** {sig_data.get('status', 'NA')}")
+        details = sig_data.get("details", {})
+        if details:
+            st.markdown(f"- 📝 **Signed On:** {details.get('signed_on', 'NA')}")
+            st.markdown(f"- 📄 **Pages with Signatures:** {details.get('pages_with_signatures', [])}")
+            st.markdown(f"- ❌ **Mismatches:** {', '.join(details.get('signatures_mismatched', [])) or 'None'}")
+            st.markdown(f"- ⚠️ **Forgery Suspected:** {'Yes' if details.get('suspected_forgery') else 'No'}")
+            st.markdown(f"- 📌 **Notes:** {details.get('notes', 'NA')}")
+    else:
+        st.write(sig_data or "No signature verification info found.")
+
+
+
+GOOGLE_MAPS_API_KEY = ""
+
+
+def get_lat_lon_from_address(address, api_key):
+    url = "https://maps.googleapis.com/maps/api/geocode/json"
+    params = {"address": address, "key": api_key}
+    response = requests.get(url, params=params)
+    if response.status_code != 200:
+        raise Exception("Failed to connect to Google Maps API.")
+    data = response.json()
+    if data["status"] == "OK":
+        result = data["results"][0]
+        location = result["geometry"]["location"]
+        return {
+            "latitude": location["lat"],
+            "longitude": location["lng"],
+            "formatted_address": result["formatted_address"],
+            "source": "google_geocoded"
+        }
+    else:
+        raise Exception(f"Geocoding failed: {data.get('status')} - {data.get('error_message')}")
+
+def render_location_details(loc):
+    st.subheader("📍 Property Location Details")
+
+    # 📌 Address
+    st.markdown("### 📌 Address")
+    address_fields = {
+        "property_number": "Property No.",
+        "street": "Street",
+        "area": "Area",
+        "village": "Village",
+        "taluk": "Taluk",
+        "district": "District",
+        "state": "State",
+        "pin_code": "PIN Code"
+    }
+    full_address = []
+    for key, label in address_fields.items():
+        value = loc.get("address", {}).get(key, "NA")
+        st.write(f"**{label}:** {value}")
+        full_address.append(value if value != "NA" else "")
+    address_str = ", ".join(filter(None, full_address))
+
+    # 🧾 Survey & Plot Info
+    st.markdown("### 🧾 Survey & Plot Info")
+    for key, label in {
+        "survey_number": "Survey No.",
+        "plot_number": "Plot No.",
+        "door_number": "Door No."
+    }.items():
+        st.write(f"**{label}:** {loc.get('survey_info', {}).get(key, 'NA')}")
+
+    # 🧭 Boundaries
+    st.markdown("### 🧭 Boundaries")
+    for side in ["north", "south", "east", "west"]:
+        st.write(f"**{side.title()}:** {loc.get('boundary_description', {}).get(side, 'NA')}")
+
+    # 🌐 Geo Coordinates
+    st.markdown("### 🌐 Geo Coordinates")
+    coords = loc.get("coordinates", {})
+    lat = coords.get("latitude")
+    lon = coords.get("longitude")
+    formatted_address = coords.get("formatted_address", address_str)
+
+    if not lat or not lon:
+        try:
+            geo = get_lat_lon_from_address(address_str, GOOGLE_MAPS_API_KEY)
+            lat = geo["latitude"]
+            lon = geo["longitude"]
+            formatted_address = geo["formatted_address"]
+            st.success("✅ Coordinates inferred using Google Maps API")
+        except Exception as e:
+            st.warning(f"⚠️ Latitude/Longitude not found or could not be inferred: {e}")
+            lat, lon = None, None
+
+    if lat and lon:
+        st.write(f"**Latitude:** {lat}")
+        st.write(f"**Longitude:** {lon}")
+        st.write(f"**Source:** {coords.get('source', 'Google Maps')}")
+        
+        # ✅ Embed custom satellite map with marker + infowindow
+        map_html = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <style>
+            #map {{
+              height: 450px;
+              width: 100%;
+            }}
+          </style>
+          <script src="https://maps.googleapis.com/maps/api/js?key={GOOGLE_MAPS_API_KEY}"></script>
+          <script>
+            function initMap() {{
+              var location = {{ lat: {lat}, lng: {lon} }};
+              var map = new google.maps.Map(document.getElementById('map'), {{
+                zoom: 18,
+                center: location,
+                mapTypeId: 'satellite'
+              }});
+              var marker = new google.maps.Marker({{
+                position: location,
+                map: map,
+                title: "Property Location"
+              }});
+              var infowindow = new google.maps.InfoWindow({{
+                content: `<div style="font-size: 14px;">
+                            <b>{formatted_address}</b><br>
+                            📍 Lat: {lat}<br>
+                            📍 Lon: {lon}
+                          </div>`
+              }});
+              marker.addListener("click", () => {{
+                infowindow.open(map, marker);
+              }});
+              infowindow.open(map, marker);
+            }}
+          </script>
+        </head>
+        <body onload="initMap()">
+          <div id="map"></div>
+        </body>
+        </html>
+        """
+        components.html(map_html, height=500)
+
+    # ✅ Consistency Check
+    st.markdown("### ✅ Consistency Check")
+    cc = loc.get("consistency_check", {})
+    st.write(f"**Status:** {cc.get('status', 'NA')}")
+    st.write(f"**Notes:** {cc.get('notes', 'NA')}")
+
+def render_chain_of_ownership(chain_data):
+    st.markdown("### 🔗 Chain of Ownership")
+
+    def flow_block(owner_from, owner_to, date, is_first=False):
+        return f"""
+<div style="font-family:monospace; padding: 10px 0;">
+    {'🔰' if is_first else '⬇️'} <b>{owner_from}</b><br>
+    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;│<br>
+    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;▼<br>
+    <b>{owner_to}</b> <span style="color:gray;">(📅 {date})</span>
+</div>
+"""
+
+    if isinstance(chain_data, list):
+        for i, link in enumerate(chain_data):
+            st.markdown(flow_block(
+                link['owner'], link['transferred_to'], link.get('date', 'NA'), is_first=(i == 0)
+            ), unsafe_allow_html=True)
+
+    elif isinstance(chain_data, str):
+        pattern = r"(?P<from>.*?)\s*→\s*(?P<to>.*?)(?:\s*\(Date:\s*(.*?)\))?"
+        transitions = re.findall(pattern, chain_data)
+        if transitions:
+            for i, (from_owner, to_owner, date) in enumerate(transitions):
+                st.markdown(flow_block(
+                    from_owner.strip(), to_owner.strip(), date.strip() if date else 'NA', is_first=(i == 0)
+                ), unsafe_allow_html=True)
+        else:
+            st.info("Could not parse chain format. Showing raw:")
+            st.markdown(f"> {chain_data}")
+    else:
+        st.write("No structured ownership chain found.")
+def render_cost_evaluation(cost_data):
+    st.markdown("### 💰 Cost Evaluation")
+
+    if isinstance(cost_data, dict):
+        # Main price comparison
+        consideration = cost_data.get('consideration_price', 'NA')
+        guideline = cost_data.get('guideline_value', 'NA')
+        difference = cost_data.get('difference', 'NA')
+
+        st.markdown(f"""
+- **Consideration Price:** ₹ {consideration:,}
+- **Guideline Value:** ₹ {guideline:,}
+- **Difference:** {'🔼 Above' if difference == 'Above' else '🔽 Below' if difference == 'Below' else '➖ Equal'}
+""")
+
+        # Stamp duty validation
+        stamp = cost_data.get('stamp_duty', {})
+        paid = stamp.get('paid', 'NA')
+        expected = stamp.get('expected', 'NA')
+        rate = stamp.get('rate', 'NA')
+
+        st.markdown(f"""
+- **Stamp Duty Paid:** ₹ {paid:,}
+- **Expected Stamp Duty:** ₹ {expected:,}
+- **Rate Applied:** {rate}
+""")
+
+        # Remarks
+        st.markdown(f"📝 **Remarks:** {cost_data.get('remarks', 'NA')}")
+
+    else:
+        # Handle fallback string response
+        st.markdown(f"💬 {cost_data or 'No cost evaluation info found.'}")
+
 def render_property_deed_ui(data):
+    print(data)
     deed = data.get("property_deed", {})
     st.title("📄 Property Deed Summary")
+    flags = deed.get("document_analysis_flags", {})
+    if flags:
+        with st.expander("🚩 Document Analysis Flags", expanded=True):
+            # Chain of Ownership
+            chain_data = flags.get('chain_of_ownership')
+            render_chain_of_ownership(chain_data)
 
+            # Cost Evaluation
+            render_cost_evaluation(flags.get("cost_evaluation"))
+
+            # Location Details
+            render_location_details(flags.get("location_details"))
+
+            # Signature Verification
+            sig_data = flags.get('signature_verification')
+            render_signature_verification(sig_data)
+
+            # # Signed Properly
+            # st.markdown(f"### 📄 Signed Properly\n- {flags.get('signed_properly', 'NA')}")
+    else:
+        st.warning("⚠️ No document analysis flags found.")
     with st.expander("🆔 Document Info", expanded=True):
         col1, col2 = st.columns(2)
         col1.markdown(f"**📑 Document ID:** {deed.get('document_id', 'NA')}")
@@ -227,7 +585,6 @@ def render_property_deed_ui(data):
         - **Encumbrance Status:** {legal.get('encumbrance_status', 'NA')}
         - **Mutation Status:** {legal.get('mutation_status', 'NA')}
         - **Litigation Status:** {legal.get('litigation_status', 'NA')}
-        - **Legal Opinion Status:** {legal.get('legal_opinion_status', 'NA')}
         """)
 
         st.markdown("**📜 Land Conversion Certificate**")
@@ -274,19 +631,13 @@ def render_property_deed_ui(data):
 
 # Final JSON show + UI render
 def show_output(text):
-    cleaned = clean_json(text)
-    try:
-        parsed = json.loads(cleaned)
-        # st.subheader("📦 Extracted JSON")
-        # st.json(parsed)
-
-        # Custom structured UI
+    parsed = clean_json(text)
+    if isinstance(parsed, dict):
         render_property_deed_ui(parsed)
-
-    except Exception as e:
+    else:
         st.subheader("📦 Output (Raw Text)")
         st.code(text)
-        st.error(f"⚠️ Output is not valid JSON: {e}")
+        st.error("⚠️ Output is not valid JSON.")
 
 # Process uploaded file
 if uploaded_file:
